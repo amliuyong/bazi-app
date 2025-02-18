@@ -1,55 +1,95 @@
+import fetch from 'node-fetch';
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+
 export const handler = async (event) => {
+  console.log("event:", event);
+
+  const connectionId = event.requestContext.connectionId;
+  const domain = event.requestContext.domainName;
+  const stage = event.requestContext.stage;
+
+  console.log("domain:", domain);
+  console.log("stage:", stage);
+  console.log("connectionId:", connectionId);
+
+  // endpoint
+  const endpoint = `https://${domain}/${stage}`;
+  console.log("endpoint:", endpoint);
+
+  const apiGatewayClient = new ApiGatewayManagementApiClient({
+    endpoint: endpoint,
+  });
+
   try {
-    // 解析请求体
     const body = JSON.parse(event.body);
-    const {
-      name,
-      gender,
-      birthDate,
-      birthTime,
-      province,
-      city
-    } = body;
+    console.log("body:", body);
 
-    // 这里添加您的业务逻辑
-    const result = {
-      message: "数据接收成功",
-      data: {
-        name,
-        gender,
-        birthDate,
-        birthTime,
-        province,
-        city,
-        // 添加其他处理结果...
-      }
-    };
+    // ollama url
+    const ollamaUrl = process.env.OLLAMA_API_URL;
+    console.log("ollamaUrl:", ollamaUrl);
 
-    return {
-      statusCode: 200,
+    const response = await fetch(`${ollamaUrl}/api/generate`, {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        // 允许跨域请求
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Allow-Methods": "OPTIONS,POST"
-      },
-      body: JSON.stringify(result)
-    };
-  } catch (error) {
-    console.error('Error:', error);
-    return {
-      statusCode: 500,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Allow-Methods": "OPTIONS,POST"
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        message: "Internal server error",
-        error: error.message
-      })
-    };
+        model: body.model,
+        prompt: body.prompt,
+        stream: true, // Always use streaming
+      }),
+    });
+
+    // 处理流式响应
+    const reader = response.body;
+    const decoder = new TextDecoder();
+
+    for await (const chunk of reader) {
+      const text = decoder.decode(chunk);
+      console.log("text:", text);
+      
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      for (const line of lines) {
+        try {
+          const data = JSON.parse(line);
+          // 发送响应给客户端
+          const command = new PostToConnectionCommand({
+            ConnectionId: connectionId,
+            Data: JSON.stringify({
+              type: 'response',
+              content: data.response,
+              done: data.done
+            })
+          });
+          
+          await apiGatewayClient.send(command);
+
+          if (data.done) {
+            break;
+          }
+        } catch (e) {
+          console.error('Error parsing line:', e);
+        }
+      }
+    }
+
+    return { statusCode: 200 };
+  } catch (error) {
+    console.error('Error:', error);
+    try {
+      const command = new PostToConnectionCommand({
+        ConnectionId: connectionId,
+        Data: JSON.stringify({
+          type: 'error',
+          message: error.message
+        })
+      });
+      
+      await apiGatewayClient.send(command);
+    } catch (e) {
+      console.error('Error sending error message:', e);
+    }
+    return { statusCode: 500 };
   }
 }; 

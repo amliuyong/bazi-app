@@ -11,5 +11,9 @@
     "frontend:build": "cd frontend && npm run build",
     "backend:deploy": "cd backend && npm run cdk deploy",
     "backend:synth": "cd backend && npm run cdk synth"
+  },
+  "dependencies": {
+    "@aws-cdk/aws-apigatewayv2-alpha": "^2.114.1-alpha.0",
+    "@aws-cdk/aws-apigatewayv2-integrations-alpha": "^2.114.1-alpha.0"
   }
 }

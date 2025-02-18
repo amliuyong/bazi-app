@@ -10,6 +10,8 @@ import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import * as apigatewayv2 from '@aws-cdk/aws-apigatewayv2-alpha';
+import * as apigatewayv2_integrations from '@aws-cdk/aws-apigatewayv2-integrations-alpha';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -70,17 +72,15 @@ export class BackendStack extends Stack {
 
     // 创建 ECS 任务定义
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'OllamaTask', {
-      memoryLimitMiB: 16384, // 16GB 内存
-      cpu: 4096, // 4 vCPU
+      memoryLimitMiB: 32768,
+      cpu: 8192,
       taskRole: taskRole,
       executionRole: taskExecutionRole,
     });
 
     // 添加 Ollama 容器
-    const container = taskDefinition.addContainer('OllamaContainer', {
+    taskDefinition.addContainer('OllamaContainer', {
       image: ecs.ContainerImage.fromDockerImageAsset(dockerAsset),
-      memoryLimitMiB: 16384,
-      cpu: 4096,
       logging: ecs.LogDrivers.awsLogs({ streamPrefix: 'ollama' }),
       portMappings: [
         {
@@ -99,24 +99,24 @@ export class BackendStack extends Stack {
       taskDefinition,
       desiredCount: 1,
       publicLoadBalancer: true,
-      listenerPort: 80,
+      listenerPort: 11434,
       targetProtocol: ecs.Protocol.HTTP,
-      cpu: 4096,
-      memoryLimitMiB: 16384,
       assignPublicIp: true,
-      healthCheckGracePeriod: Duration.seconds(600), // 给予足够的时间下载模型
+      healthCheckGracePeriod: Duration.seconds(600),
     });
 
-    // 配置健康检查
-    fargateService.targetGroup.configureHealthCheck({
-      path: '/api/health',
-      port: '80',
-      interval: Duration.seconds(60),
-      timeout: Duration.seconds(30),
-      healthyThresholdCount: 2,
-      unhealthyThresholdCount: 5,
-      startPeriod: Duration.seconds(600), // 给予足够的启动时间
-    });
+    // 配置目标组 - 增加超时时间
+    fargateService.targetGroup.setAttribute('deregistration_delay.timeout_seconds', '300');
+    fargateService.targetGroup.setAttribute('load_balancing.algorithm.type', 'round_robin');
+
+    // 配置负载均衡器 - 增加空闲超时时间
+    const cfnLoadBalancer = fargateService.loadBalancer.node.defaultChild;
+    cfnLoadBalancer.loadBalancerAttributes = [
+      {
+        key: 'idle_timeout.timeout_seconds',
+        value: '300'
+      }
+    ];
 
     // 配置安全组
     fargateService.service.connections.allowFromAnyIpv4(ec2.Port.tcp(11434), 'Allow Ollama API access');
@@ -126,7 +126,7 @@ export class BackendStack extends Stack {
       runtime: Runtime.NODEJS_18_X,
       entry: join(__dirname, '../lambda/predict.js'),
       handler: 'handler',
-      timeout: Duration.seconds(30),
+      timeout: Duration.seconds(600),
       memorySize: 256,
       environment: {
         OLLAMA_API_URL: `http://${fargateService.loadBalancer.loadBalancerDnsName}:11434`,
@@ -134,39 +134,65 @@ export class BackendStack extends Stack {
       bundling: {
         minify: true,
         sourceMap: true,
-        externalModules: [
-          'aws-sdk',
-        ],
+        externalModules: [],
       },
     });
 
-    // 创建 API Gateway
-    const api = new apigateway.RestApi(this, 'PredictApi', {
-      restApiName: 'Predict Service',
-      description: 'This is the API for prediction service',
-      defaultCorsPreflightOptions: {
-        allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: apigateway.Cors.ALL_METHODS,
-        allowHeaders: [
-          'Content-Type',
-          'X-Amz-Date',
-          'Authorization',
-          'X-Api-Key',
-        ],
-        allowCredentials: true,
+    // 创建 WebSocket API
+    const webSocketApi = new apigatewayv2.WebSocketApi(this, 'OllamaWebSocketApi', {
+      connectRouteOptions: {
+        integration: new apigatewayv2_integrations.WebSocketLambdaIntegration(
+          'ConnectIntegration',
+          new NodejsFunction(this, 'ConnectHandler', {
+            runtime: Runtime.NODEJS_18_X,
+            entry: join(__dirname, '../lambda/connect.js'),
+            handler: 'handler',
+          })
+        ),
+      },
+      disconnectRouteOptions: {
+        integration: new apigatewayv2_integrations.WebSocketLambdaIntegration(
+          'DisconnectIntegration',
+          new NodejsFunction(this, 'DisconnectHandler', {
+            runtime: Runtime.NODEJS_18_X,
+            entry: join(__dirname, '../lambda/disconnect.js'),
+            handler: 'handler',
+          })
+        ),
       },
     });
 
-    // 创建 API 资源和方法
-    const predict = api.root.addResource('predict');
-    predict.addMethod('POST', new apigateway.LambdaIntegration(predictFunction));
-
-    // 输出 API Gateway URL 和 Ollama Service URL
-    new cdk.CfnOutput(this, 'ApiUrl', {
-      value: api.url,
-      description: 'API Gateway endpoint URL',
+    // 添加预测消息路由
+    webSocketApi.addRoute('predict', {
+      integration: new apigatewayv2_integrations.WebSocketLambdaIntegration(
+        'PredictIntegration',
+        predictFunction
+      ),
     });
 
+    // 创建 WebSocket Stage
+    const stage = new apigatewayv2.WebSocketStage(this, 'OllamaWebSocketStage', {
+      webSocketApi,
+      stageName: 'prod',
+      autoDeploy: true,
+    });
+
+    // 给 Lambda 添加发送消息的权限
+    predictFunction.addEnvironment('WEBSOCKET_ENDPOINT', stage.url);
+    predictFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['execute-api:ManageConnections'],
+      resources: [`arn:aws:execute-api:${this.region}:${this.account}:${webSocketApi.apiId}/*`],
+    }));
+
+
+    // 输出 WebSocket URL
+    new cdk.CfnOutput(this, 'WebSocketUrl', {
+      value: stage.url,
+      description: 'WebSocket API endpoint URL',
+    });
+
+    // 输出 Ollama Service URL
     new cdk.CfnOutput(this, 'OllamaServiceUrl', {
       value: `http://${fargateService.loadBalancer.loadBalancerDnsName}:11434`,
       description: 'Ollama Service URL',

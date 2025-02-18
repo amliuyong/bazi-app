@@ -12,8 +12,8 @@ RUN apt-get update && apt-get install -y dos2unix \
 # 使用 ollama 作为最终镜像
 FROM --platform=linux/amd64 ollama/ollama:latest
 
-# 安装 bash
-RUN apk add --no-cache bash
+# 安装 bash (使用 apt 而不是 apk)
+RUN apt-get update && apt-get install -y bash
 
 # 从构建阶段复制处理好的脚本
 COPY --from=builder /entrypoint.sh /entrypoint.sh
