@@ -7,7 +7,9 @@ ollama serve &
 sleep 10
 
 # 拉取 deepseek-r1 模型
-ollama pull deepseek-r1
+# ollama pull deepseek-r1
+
+ollama pull deepseek-r1:14b
 
 # # 拉取 llama3.2 模型
 # ollama pull llama3.2

@@ -106,7 +106,7 @@ export class BackendStack extends Stack {
     });
 
     // 配置目标组 - 增加超时时间
-    fargateService.targetGroup.setAttribute('deregistration_delay.timeout_seconds', '300');
+    fargateService.targetGroup.setAttribute('deregistration_delay.timeout_seconds', '900');
     fargateService.targetGroup.setAttribute('load_balancing.algorithm.type', 'round_robin');
 
     // 配置负载均衡器 - 增加空闲超时时间
@@ -114,7 +114,7 @@ export class BackendStack extends Stack {
     cfnLoadBalancer.loadBalancerAttributes = [
       {
         key: 'idle_timeout.timeout_seconds',
-        value: '300'
+        value: '900'
       }
     ];
 
@@ -126,7 +126,7 @@ export class BackendStack extends Stack {
       runtime: Runtime.NODEJS_18_X,
       entry: join(__dirname, '../lambda/predict.js'),
       handler: 'handler',
-      timeout: Duration.seconds(600),
+      timeout: Duration.seconds(900),
       memorySize: 256,
       environment: {
         OLLAMA_API_URL: `http://${fargateService.loadBalancer.loadBalancerDnsName}:11434`,

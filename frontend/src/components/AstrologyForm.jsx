@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react';
 import { Select, Form, DatePicker, TimePicker, Button, Spin, Input } from 'antd';
 import { provinces, cityData } from '../data/cities';
 import ReactMarkdown from 'react-markdown';
+import { WS_URL, MODEL } from '../config';
 
 const { Option } = Select;
 
@@ -26,14 +27,14 @@ const AstrologyForm = () => {
   };
 
   const connectWebSocket = (formData) => {
-    const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL);
+    const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('WebSocket Connected');
       const message = {
         action: "predict",
-        model: "deepseek-r1",
+        model: MODEL,
         prompt: `今天是 ${new Date().toLocaleDateString()}，个人信息如下：${JSON.stringify(formData)}。分析我的星座运势，分析结果包含：星座特点、性格分析、爱情观、事业发展、月亮星座、上升星座、今年运势、建议等。`
       };
       ws.send(JSON.stringify(message));

@@ -5,6 +5,7 @@ import { Select, Form, Input, Button, DatePicker, TimePicker, Spin } from 'antd'
 import { provinces, cityData } from '../data/cities';
 import ReactMarkdown from 'react-markdown';
 import solarLunar from 'solarlunar';
+import { WS_URL, MODEL } from '../config';
 
 const { Option } = Select;
 
@@ -71,14 +72,14 @@ const BirthInfoForm = () => {
   };
 
   const connectWebSocket = (formData) => {
-    const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL);
+    const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('WebSocket Connected');
       const message = {
         action: "predict",
-        model: "deepseek-r1",
+        model: MODEL,
         prompt: `今天是 ${new Date().toLocaleDateString()}， 个人信息如下：${JSON.stringify(formData)}。分析我的八字和命理，分析结果包含：八字分析、五行分布、姓名分析，命理，运势（一生中的大运,大劫,当前运势），并提供建议。`
       };
       ws.send(JSON.stringify(message));
