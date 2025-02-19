@@ -1,14 +1,13 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Select, Form, Input, Button, DatePicker, TimePicker, Spin } from 'antd';
+import { Select, Form, DatePicker, TimePicker, Button, Spin, Input } from 'antd';
 import { provinces, cityData } from '../data/cities';
 import ReactMarkdown from 'react-markdown';
-import solarLunar from 'solarlunar';
 
 const { Option } = Select;
 
-const BirthInfoForm = () => {
+const AstrologyForm = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [selectedProvince, setSelectedProvince] = useState('');
@@ -18,56 +17,12 @@ const BirthInfoForm = () => {
 
   const onProvinceChange = (value) => {
     setSelectedProvince(value);
-    form.setFieldValue('city', undefined); // 清空城市选择
+    form.setFieldValue('city', undefined);
   };
 
   const getCities = () => {
     if (!selectedProvince) return [];
     return cityData[selectedProvince]?.cities || [];
-  };
-
-  // 修改阳历转阴历的函数
-  const getLunarDate = (dateStr) => {
-    if (!dateStr) return '';
-
-    try {
-      // 解析日期
-      const [year, month, day] = dateStr.split('-').map(Number);
-      
-      // 使用 solarLunar 转换
-      const lunar = solarLunar.solar2lunar(year, month, day);
-      
-      // 返回格式化的阴历日期
-      return `农历${lunar.lYear}年${lunar.lMonth}月${lunar.lDay}日`;
-    } catch (error) {
-      console.error('农历转换错误:', error);
-      return dateStr; // 如果转换失败，返回原始日期
-    }
-  };
-
-  // 添加时辰转换函数
-  const getLunarTime = (timeStr) => {
-    if (!timeStr) return '';
-
-    const hour = parseInt(timeStr.split(':')[0]);
-
-    // 定义时辰对照表
-    const timeMap = {
-      23: '子时', 0: '子时',
-      1: '丑时', 2: '丑时',
-      3: '寅时', 4: '寅时',
-      5: '卯时', 6: '卯时',
-      7: '辰时', 8: '辰时',
-      9: '巳时', 10: '巳时',
-      11: '午时', 12: '午时',
-      13: '未时', 14: '未时',
-      15: '申时', 16: '申时',
-      17: '酉时', 18: '酉时',
-      19: '戌时', 20: '戌时',
-      21: '亥时', 22: '亥时'
-    };
-
-    return timeMap[hour] || '';
   };
 
   const connectWebSocket = (formData) => {
@@ -79,7 +34,7 @@ const BirthInfoForm = () => {
       const message = {
         action: "predict",
         model: "deepseek-r1",
-        prompt: `今天是 ${new Date().toLocaleDateString()}， 个人信息如下：${JSON.stringify(formData)}。分析我的八字和命理，分析结果包含：八字分析、五行分布、姓名分析，命理，运势（一生中的大运,大劫,当前运势），并提供建议。`
+        prompt: `今天是 ${new Date().toLocaleDateString()}，个人信息如下：${JSON.stringify(formData)}。分析我的星座运势，分析结果包含：星座特点、性格分析、爱情观、事业发展、月亮星座、上升星座、今年运势、建议等。`
       };
       ws.send(JSON.stringify(message));
     };
@@ -122,9 +77,8 @@ const BirthInfoForm = () => {
   const onFinish = async (values) => {
     try {
       setLoading(true);
-      setStreamingResponse(''); // Clear previous response
+      setStreamingResponse('');
 
-      // Format the date and time
       const formattedDate = values.birthDate?.format('YYYY-MM-DD');
       const formattedTime = values.birthTime?.format('HH:mm');
 
@@ -134,11 +88,7 @@ const BirthInfoForm = () => {
         birthTime: formattedTime,
         province: cityData[values.province]?.label,
         city: getCities().find(city => city.value === values.city)?.label,
-        lunarDate: getLunarDate(formattedDate),
-        lunarTime: getLunarTime(formattedTime),
       };
-
-      console.log(formData);
 
       setSubmittedData(formData);
       connectWebSocket(formData);
@@ -149,7 +99,6 @@ const BirthInfoForm = () => {
     }
   };
 
-  // Cleanup WebSocket on component unmount
   React.useEffect(() => {
     return () => {
       if (wsRef.current) {
@@ -162,7 +111,7 @@ const BirthInfoForm = () => {
     <div className="flex gap-6">
       {/* 左侧表单 */}
       <div className="w-[400px] bg-white p-6 rounded-lg shadow-sm">
-        <h2 className="text-lg font-medium mb-6">个人信息登记表</h2>
+        <h2 className="text-lg font-medium mb-6">星座分析</h2>
         <Form
           form={form}
           layout="vertical"
@@ -189,7 +138,7 @@ const BirthInfoForm = () => {
 
           <Form.Item
             name="birthDate"
-            label="公历出生日期"
+            label="出生日期"
             rules={[{ required: true, message: '请选择出生日期' }]}
           >
             <DatePicker style={{ width: '100%' }} />
@@ -197,7 +146,7 @@ const BirthInfoForm = () => {
 
           <Form.Item
             name="birthTime"
-            label="公历出生时间"
+            label="出生时间"
             rules={[{ required: true, message: '请选择出生时间' }]}
           >
             <TimePicker style={{ width: '100%' }} format="HH:mm" />
@@ -253,11 +202,9 @@ const BirthInfoForm = () => {
             <div className="mb-6 text-sm">
               <p className="mb-2"><strong>姓名：</strong>{submittedData.name}</p>
               <p className="mb-2"><strong>性别：</strong>{submittedData.gender === 'male' ? '男' : '女'}</p>
-              <p className="mb-2"><strong>公历出生日期：</strong>{submittedData.birthDate}</p>
-              <p className="mb-2"><strong>公历出生时间：</strong>{submittedData.birthTime}</p>
+              <p className="mb-2"><strong>出生日期：</strong>{submittedData.birthDate}</p>
+              <p className="mb-2"><strong>出生时间：</strong>{submittedData.birthTime}</p>
               <p className="mb-2"><strong>出生地点：</strong>{submittedData.province} {submittedData.city}</p>
-              <p className="mb-2"><strong>阴历出生日期：</strong>{submittedData.lunarDate}</p>
-              <p className="mb-2"><strong>阴历出生时间：</strong>{submittedData.lunarTime}</p>
             </div>
 
             <h2 className="text-lg font-medium mb-4">分析结果</h2>
@@ -299,4 +246,4 @@ const BirthInfoForm = () => {
   );
 };
 
-export default BirthInfoForm; 
+export default AstrologyForm; 

@@ -15,6 +15,10 @@ const Sidebar = () => {
       label: <Link href="/">八字算命</Link>,
     },
     {
+      key: '/astrology',
+      label: <Link href="/astrology">星座分析</Link>,
+    },
+    {
       key: '/matching',
       label: <Link href="/matching">八字配对</Link>,
     },
