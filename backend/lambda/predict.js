@@ -57,12 +57,25 @@ export const handler = async (event) => {
 // Ollama 处理函数
 async function handleOllamaStream(body, connectionId, apiGatewayClient) {
   const ollamaUrl = process.env.OLLAMA_API_URL;
+  
+  // 将历史消息转换为文本格式
+  let fullPrompt = '';
+  if (body.context) {
+    const history = body.context;  // 已经是对象数组
+    for (const msg of history) {
+      const role = msg.role === 'user' ? 'Human' : 'Assistant';
+      fullPrompt += `${role}: ${msg.content}\n`;
+    }
+  }
+  fullPrompt += `Human: ${body.prompt}`;
+  
+  console.log('fullPrompt:', fullPrompt);
   const response = await fetch(`${ollamaUrl}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: body.model,
-      prompt: body.prompt,
+      prompt: fullPrompt,
       stream: true,
     }),
   });
@@ -102,10 +115,29 @@ async function handleBedrockAnthropicStream(body, connectionId, apiGatewayClient
     region: process.env.AWS_REGION
   });
   
-  // Use Claude 3 models
   const modelId = body.model;
-
   console.log('Using model:', modelId);
+
+  // 将历史消息转换为 Anthropic 格式
+  const messages = [];
+  if (body.context) {
+    const history = body.context;  // 已经是对象数组
+    for (const msg of history) {
+      messages.push({
+        role: msg.role,
+        content: [{ type: "text", text: msg.content }]
+      });
+    }
+  }
+  
+  // 添加当前提示
+  messages.push({
+    role: "user",
+    content: [{ type: "text", text: body.prompt }]
+  });
+
+  // log messages
+  console.log('messages:', messages);
 
   const command = new InvokeModelWithResponseStreamCommand({
     modelId: modelId,
@@ -114,17 +146,7 @@ async function handleBedrockAnthropicStream(body, connectionId, apiGatewayClient
     body: JSON.stringify({
       anthropic_version: "bedrock-2023-05-31",
       max_tokens: 4096,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: body.prompt
-            }
-          ]
-        }
-      ]
+      messages: messages
     })
   });
 
@@ -134,7 +156,7 @@ async function handleBedrockAnthropicStream(body, connectionId, apiGatewayClient
 
     for await (const chunk of response.body) {
       const decoded = JSON.parse(new TextDecoder().decode(chunk.chunk.bytes));
-      console.log('decoded chunk:', decoded);
+      //console.log('decoded chunk:', decoded);
 
       if (decoded.type === 'content_block_delta') {
         await apiGatewayClient.send(new PostToConnectionCommand({
@@ -182,6 +204,26 @@ async function handleNovaStream(body, connectionId, apiGatewayClient) {
   const modelId = body.model;
   console.log('Using Nova model:', modelId);
 
+  // 将历史消息转换为 Nova 格式
+  const messages = [];
+  if (body.context) {
+    const history = body.context;  // 已经是对象数组
+    for (const msg of history) {
+      messages.push({
+        role: msg.role,
+        content: [{ text: msg.content }]
+      });
+    }
+  }
+  
+  // 添加当前提示
+  messages.push({
+    role: "user",
+    content: [{ text: body.prompt }]
+  });
+
+  console.log('messages:', messages);
+
   const command = new InvokeModelWithResponseStreamCommand({
     modelId: modelId,
     contentType: 'application/json',
@@ -190,16 +232,7 @@ async function handleNovaStream(body, connectionId, apiGatewayClient) {
       inferenceConfig: {
         max_new_tokens: 4096,
       },
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              text: body.prompt
-            }
-          ]
-        }
-      ]
+      messages: messages
     })
   });
 
@@ -219,7 +252,7 @@ async function handleNovaStream(body, connectionId, apiGatewayClient) {
         isFirstChunk = false;
       }
 
-      console.log('decoded chunk:', decoded);
+      //console.log('decoded chunk:', decoded);
 
       // Nova returns chunks with delta.text field
       if (decoded.contentBlockDelta?.delta?.text) {
@@ -297,9 +330,19 @@ async function handleOpenAIStream(body, connectionId, apiGatewayClient) {
   const model = body.model.replace('openai.', '');
   console.log("model:", model);
   
+  // 将历史消息转换为 OpenAI 格式
+  const messages = [];
+  if (body.context) {
+    messages.push(...body.context);  // OpenAI 可以直接使用相同格式
+  }
+  
+  // 添加当前提示
+  messages.push({ role: 'user', content: body.prompt });
+  
+  console.log('messages:', messages);
   const stream = await openai.chat.completions.create({
     model: model,
-    messages: [{ role: 'user', content: body.prompt }],
+    messages: messages,
     stream: true,
   });
 
