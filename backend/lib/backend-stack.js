@@ -130,13 +130,45 @@ export class BackendStack extends Stack {
       memorySize: 256,
       environment: {
         OLLAMA_API_URL: `http://${fargateService.loadBalancer.loadBalancerDnsName}:11434`,
+        AWS_REGION: this.region,
       },
       bundling: {
         minify: true,
         sourceMap: true,
-        externalModules: [],
+        externalModules: [
+          '@aws-sdk/client-apigatewaymanagementapi',
+          '@aws-sdk/client-bedrock-runtime',
+          '@aws-sdk/client-ssm'
+        ],
+        nodeModules: [
+          'node-fetch',
+          'openai'
+        ],
       },
     });
+
+    // 添加 Bedrock 调用权限
+    predictFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'bedrock:*',
+      ],
+      resources: [
+        `arn:aws:bedrock:${this.region}::foundation-model/*`,
+      ],
+    }));
+
+    // 添加 Parameter Store 访问权限
+    predictFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'ssm:GetParameter',
+        'ssm:GetParameters'
+      ],
+      resources: [
+        `arn:aws:ssm:${this.region}:${this.account}:parameter/openai/api-key`
+      ],
+    }));
 
     // 创建 WebSocket API
     const webSocketApi = new apigatewayv2.WebSocketApi(this, 'OllamaWebSocketApi', {

@@ -19,8 +19,8 @@ const Sidebar = () => {
       label: <Link href="/astrology">星座分析</Link>,
     },
     {
-      key: '/matching',
-      label: <Link href="/matching">八字配对</Link>,
+      key: '/bone-weight',
+      label: <Link href="/bone-weight">骨重算命</Link>,
     },
   ];
 
