@@ -25,7 +25,10 @@ export const handler = async (event) => {
       return await handleOllamaStream(body, connectionId, apiGatewayClient);
     } else if (body.model.startsWith('anthropic')) {
       // 使用 AWS Bedrock
-      return await handleBedrockStream(body, connectionId, apiGatewayClient);
+      return await handleBedrockAnthropicStream(body, connectionId, apiGatewayClient);
+    } else if (body.model.startsWith('amazon.nova')) {
+      // 使用 AWS Bedrock Nova
+      return await handleNovaStream(body, connectionId, apiGatewayClient);
     } else if (body.model.startsWith('openai')) {
       // 使用 OpenAI API
       return await handleOpenAIStream(body, connectionId, apiGatewayClient);
@@ -94,12 +97,15 @@ async function handleOllamaStream(body, connectionId, apiGatewayClient) {
 }
 
 // Bedrock 处理函数
-async function handleBedrockStream(body, connectionId, apiGatewayClient) {
-  const bedrockClient = new BedrockRuntimeClient({ region: process.env.AWS_REGION });
+async function handleBedrockAnthropicStream(body, connectionId, apiGatewayClient) {
+  const bedrockClient = new BedrockRuntimeClient({ 
+    region: process.env.AWS_REGION
+  });
   
-  const modelId = body.model === 'anthropic.claude-3-5-sonnet-20240620-v1:0' 
-    ? 'anthropic.claude-3-5-sonnet-20240620-v1:0'
-    : 'anthropic.claude-3-5-haiku-20241022-v1:0';
+  // Use Claude 3 models
+  const modelId = body.model;
+
+  console.log('Using model:', modelId);
 
   const command = new InvokeModelWithResponseStreamCommand({
     modelId: modelId,
@@ -107,45 +113,159 @@ async function handleBedrockStream(body, connectionId, apiGatewayClient) {
     accept: 'application/json',
     body: JSON.stringify({
       anthropic_version: "bedrock-2023-05-31",
-      max_tokens: 4096,
+      max_tokens: 1000,
       messages: [
         {
           role: "user",
-          content: body.prompt
+          content: [
+            {
+              type: "text",
+              text: body.prompt
+            }
+          ]
         }
       ]
     })
   });
 
-  const response = await bedrockClient.send(command);
-  const chunks = [];
+  try {
+    const response = await bedrockClient.send(command);
+    const chunks = [];
 
-  for await (const chunk of response.body) {
-    const decoded = JSON.parse(new TextDecoder().decode(chunk.chunk.bytes));
-    if (decoded.type === 'content_block_delta') {
+    for await (const chunk of response.body) {
+      const decoded = JSON.parse(new TextDecoder().decode(chunk.chunk.bytes));
+      console.log('decoded chunk:', decoded);
+      
+      if (decoded.type === 'content_block_delta') {
+        await apiGatewayClient.send(new PostToConnectionCommand({
+          ConnectionId: connectionId,
+          Data: JSON.stringify({
+            type: 'response',
+            content: decoded.delta.text,
+            done: false
+          })
+        }));
+        chunks.push(decoded.delta.text);
+      }
+    }
+
+    // 发送完成信号
+    await apiGatewayClient.send(new PostToConnectionCommand({
+      ConnectionId: connectionId,
+      Data: JSON.stringify({
+        type: 'response',
+        content: '',
+        done: true
+      })
+    }));
+
+    return { statusCode: 200 };
+  } catch (error) {
+    console.error('Bedrock Error:', error);
+    await apiGatewayClient.send(new PostToConnectionCommand({
+      ConnectionId: connectionId,
+      Data: JSON.stringify({
+        type: 'error',
+        message: `Bedrock Error: ${error.message}`
+      })
+    }));
+    return { statusCode: 500 };
+  }
+}
+
+// Nova handler function
+async function handleNovaStream(body, connectionId, apiGatewayClient) {
+  const bedrockClient = new BedrockRuntimeClient({ 
+    region: process.env.AWS_REGION
+  });
+  
+  const modelId = body.model;
+  console.log('Using Nova model:', modelId);
+
+  const command = new InvokeModelWithResponseStreamCommand({
+    modelId: modelId,
+    contentType: 'application/json',
+    accept: 'application/json',
+    body: JSON.stringify({
+      inferenceConfig: {
+        max_new_tokens: 1000,
+      },
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              text: body.prompt
+            }
+          ]
+        }
+      ]
+    })
+  });
+
+  try {
+    const response = await bedrockClient.send(command);
+    let isFirstChunk = true;
+    let responseText = '';
+
+    for await (const chunk of response.body) {
+      const decoded = JSON.parse(new TextDecoder().decode(chunk.chunk.bytes));
+      
+      // Log first chunk for debugging
+      if (isFirstChunk) {
+        console.log('First chunk:', decoded);
+        isFirstChunk = false;
+      }
+
+      console.log('decoded chunk:', decoded);
+
+      // Nova returns chunks with delta.text field
+      if (decoded.contentBlockDelta?.delta?.text) {
+        responseText += decoded.contentBlockDelta.delta.text;
+        await apiGatewayClient.send(new PostToConnectionCommand({
+          ConnectionId: connectionId,
+          Data: JSON.stringify({
+            type: 'response',
+            content: decoded.contentBlockDelta.delta.text,
+            done: false
+          })
+        }));
+      }
+    }
+
+    // Send final response if we have accumulated text
+    if (responseText) {
       await apiGatewayClient.send(new PostToConnectionCommand({
         ConnectionId: connectionId,
         Data: JSON.stringify({
           type: 'response',
-          content: decoded.delta.text,
-          done: false
+          content: '',
+          done: true
         })
       }));
-      chunks.push(decoded.delta.text);
+    } else {
+      // If no response was generated, send an error
+      await apiGatewayClient.send(new PostToConnectionCommand({
+        ConnectionId: connectionId,
+        Data: JSON.stringify({
+          type: 'error',
+          message: 'No response generated from Nova model'
+        })
+      }));
     }
+
+    return { statusCode: 200 };
+  } catch (error) {
+    console.error('Nova Error:', error);
+    await apiGatewayClient.send(new PostToConnectionCommand({
+      ConnectionId: connectionId,
+      Data: JSON.stringify({
+        type: 'error',
+        message: `Nova Error: ${error.message}`
+      })
+    }));
+    return { statusCode: 500 };
   }
-
-  // 发送完成信号
-  await apiGatewayClient.send(new PostToConnectionCommand({
-    ConnectionId: connectionId,
-    Data: JSON.stringify({
-      type: 'response',
-      content: '',
-      done: true
-    })
-  }));
-
-  return { statusCode: 200 };
 }
 
 // 添加获取 OpenAI API Key 的函数

@@ -130,20 +130,11 @@ export class BackendStack extends Stack {
       memorySize: 256,
       environment: {
         OLLAMA_API_URL: `http://${fargateService.loadBalancer.loadBalancerDnsName}:11434`,
-        AWS_REGION: this.region,
       },
       bundling: {
         minify: true,
         sourceMap: true,
-        externalModules: [
-          '@aws-sdk/client-apigatewaymanagementapi',
-          '@aws-sdk/client-bedrock-runtime',
-          '@aws-sdk/client-ssm'
-        ],
-        nodeModules: [
-          'node-fetch',
-          'openai'
-        ],
+        externalModules: ['aws-sdk'],
       },
     });
 

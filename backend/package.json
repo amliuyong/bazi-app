@@ -18,12 +18,12 @@
   "dependencies": {
     "@aws-cdk/aws-ecr-assets": "^1.204.0",
     "@aws-cdk/aws-ecs-patterns": "^1.204.0",
-    "@aws-sdk/client-apigatewaymanagementapi": "^3.0.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.0.0",
-    "@aws-sdk/client-ssm": "^3.0.0",
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.750.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.751.0",
+    "@aws-sdk/client-ssm": "^3.750.0",
     "aws-cdk-lib": "2.178.2",
     "constructs": "^10.0.0",
-    "node-fetch": "^3.0.0",
-    "openai": "^4.0.0"
+    "node-fetch": "^3.3.2",
+    "openai": "^4.85.2"
   }
 }
