@@ -113,7 +113,7 @@ async function handleBedrockAnthropicStream(body, connectionId, apiGatewayClient
     accept: 'application/json',
     body: JSON.stringify({
       anthropic_version: "bedrock-2023-05-31",
-      max_tokens: 1000,
+      max_tokens: 4096,
       messages: [
         {
           role: "user",
@@ -135,7 +135,7 @@ async function handleBedrockAnthropicStream(body, connectionId, apiGatewayClient
     for await (const chunk of response.body) {
       const decoded = JSON.parse(new TextDecoder().decode(chunk.chunk.bytes));
       console.log('decoded chunk:', decoded);
-      
+
       if (decoded.type === 'content_block_delta') {
         await apiGatewayClient.send(new PostToConnectionCommand({
           ConnectionId: connectionId,
@@ -188,7 +188,7 @@ async function handleNovaStream(body, connectionId, apiGatewayClient) {
     accept: 'application/json',
     body: JSON.stringify({
       inferenceConfig: {
-        max_new_tokens: 1000,
+        max_new_tokens: 4096,
       },
       messages: [
         {
@@ -207,6 +207,8 @@ async function handleNovaStream(body, connectionId, apiGatewayClient) {
     const response = await bedrockClient.send(command);
     let isFirstChunk = true;
     let responseText = '';
+
+    let messageStop = false;
 
     for await (const chunk of response.body) {
       const decoded = JSON.parse(new TextDecoder().decode(chunk.chunk.bytes));
@@ -234,7 +236,7 @@ async function handleNovaStream(body, connectionId, apiGatewayClient) {
     }
 
     // Send final response if we have accumulated text
-    if (responseText) {
+    if (responseText && !messageStop) {
       await apiGatewayClient.send(new PostToConnectionCommand({
         ConnectionId: connectionId,
         Data: JSON.stringify({
