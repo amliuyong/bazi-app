@@ -4,7 +4,8 @@ import React, { useState, useRef } from 'react';
 import { Select, Form, DatePicker, TimePicker, Button, Spin, Input } from 'antd';
 import { provinces, cityData } from '../data/cities';
 import ReactMarkdown from 'react-markdown';
-import { WS_URL, MODEL } from '../config';
+import { WS_URL } from '../config';
+import { modelOptions } from '../config/models';
 
 const { Option } = Select;
 
@@ -34,7 +35,7 @@ const AstrologyForm = () => {
       console.log('WebSocket Connected');
       const message = {
         action: "predict",
-        model: MODEL,
+        model: formData.model,
         prompt: `今天是 ${new Date().toLocaleDateString()}，个人信息如下：${JSON.stringify(formData)}。分析我的星座运势，分析结果包含：星座特点、性格分析、爱情观、事业发展、月亮星座、上升星座、今年运势、建议等。`
       };
       ws.send(JSON.stringify(message));
@@ -89,6 +90,7 @@ const AstrologyForm = () => {
         birthTime: formattedTime,
         province: cityData[values.province]?.label,
         city: getCities().find(city => city.value === values.city)?.label,
+        model: values.model,
       };
 
       setSubmittedData(formData);
@@ -118,6 +120,21 @@ const AstrologyForm = () => {
           layout="vertical"
           onFinish={onFinish}
         >
+          <Form.Item
+            name="model"
+            label="选择模型"
+            rules={[{ required: true, message: '请选择模型' }]}
+            initialValue="amazon.nova-pro-v1:0"
+          >
+            <Select>
+              {modelOptions.map(option => (
+                <Option key={option.value} value={option.value}>
+                  {option.label}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+
           <Form.Item
             name="name"
             label="姓名"

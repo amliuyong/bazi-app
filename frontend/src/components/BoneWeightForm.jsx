@@ -1,10 +1,13 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Form, Button, DatePicker, TimePicker, Spin } from 'antd';
+import { Select, Form, Button, DatePicker, TimePicker, Spin } from 'antd';
 import ReactMarkdown from 'react-markdown';
-import { WS_URL, MODEL } from '../config';
-import solarLunar from 'solarlunar';
+import { WS_URL } from '../config';
+import { modelOptions } from '../config/models';
+import { getLunarDate, getLunarTime } from '../utils/lunar';
+
+const { Option } = Select;
 
 const BoneWeightForm = () => {
   const [form] = Form.useForm();
@@ -21,7 +24,7 @@ const BoneWeightForm = () => {
       console.log('WebSocket Connected');
       const message = {
         action: "predict",
-        model: MODEL,
+        model: formData.model,
         prompt: `今天是 ${new Date().toLocaleDateString()}，个人信息如下：${JSON.stringify(formData)}。请根据骨重算命理论，分析此人的命理，并提供相应的建议。`
       };
       ws.send(JSON.stringify(message));
@@ -62,50 +65,6 @@ const BoneWeightForm = () => {
     };
   };
 
-  // 添加阳历转阴历的函数
-  const getLunarDate = (dateStr) => {
-    if (!dateStr) return '';
-
-    try {
-      // 解析日期
-      const [year, month, day] = dateStr.split('-').map(Number);
-      
-      // 使用 solarLunar 转换
-      const lunar = solarLunar.solar2lunar(year, month, day);
-      
-      // 返回格式化的阴历日期
-      return `农历${lunar.lYear}年${lunar.lMonth}月${lunar.lDay}日`;
-    } catch (error) {
-      console.error('农历转换错误:', error);
-      return dateStr; // 如果转换失败，返回原始日期
-    }
-  };
-
-  // 添加时辰转换函数
-  const getLunarTime = (timeStr) => {
-    if (!timeStr) return '';
-
-    const hour = parseInt(timeStr.split(':')[0]);
-
-    // 定义时辰对照表
-    const timeMap = {
-      23: '子时', 0: '子时',
-      1: '丑时', 2: '丑时',
-      3: '寅时', 4: '寅时',
-      5: '卯时', 6: '卯时',
-      7: '辰时', 8: '辰时',
-      9: '巳时', 10: '巳时',
-      11: '午时', 12: '午时',
-      13: '未时', 14: '未时',
-      15: '申时', 16: '申时',
-      17: '酉时', 18: '酉时',
-      19: '戌时', 20: '戌时',
-      21: '亥时', 22: '亥时'
-    };
-
-    return timeMap[hour] || '';
-  };
-
   const onFinish = async (values) => {
     try {
       setLoading(true);
@@ -115,6 +74,7 @@ const BoneWeightForm = () => {
       const formattedTime = values.birthTime?.format('HH:mm');
 
       const formData = {
+        model: values.model,
         birthDate: formattedDate,
         birthTime: formattedTime,
         lunarDate: getLunarDate(formattedDate),
@@ -148,6 +108,21 @@ const BoneWeightForm = () => {
           layout="vertical"
           onFinish={onFinish}
         >
+          <Form.Item
+            name="model"
+            label="选择模型"
+            rules={[{ required: true, message: '请选择模型' }]}
+            initialValue="amazon.nova-pro-v1:0"
+          >
+            <Select>
+              {modelOptions.map(option => (
+                <Option key={option.value} value={option.value}>
+                  {option.label}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+
           <Form.Item
             name="birthDate"
             label="出生日期"

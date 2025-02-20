@@ -4,10 +4,12 @@ import React, { useState, useRef } from 'react';
 import { Select, Form, Input, Button, DatePicker, TimePicker, Spin } from 'antd';
 import { provinces, cityData } from '../data/cities';
 import ReactMarkdown from 'react-markdown';
-import solarLunar from 'solarlunar';
-import { WS_URL, MODEL } from '../config';
+import { WS_URL } from '../config';
+import { modelOptions } from '../config/models';
+import { getLunarDate, getLunarTime } from '../utils/lunar';
 
 const { Option } = Select;
+
 
 const BirthInfoForm = () => {
   const [form] = Form.useForm();
@@ -27,50 +29,6 @@ const BirthInfoForm = () => {
     return cityData[selectedProvince]?.cities || [];
   };
 
-  // 修改阳历转阴历的函数
-  const getLunarDate = (dateStr) => {
-    if (!dateStr) return '';
-
-    try {
-      // 解析日期
-      const [year, month, day] = dateStr.split('-').map(Number);
-      
-      // 使用 solarLunar 转换
-      const lunar = solarLunar.solar2lunar(year, month, day);
-      
-      // 返回格式化的阴历日期
-      return `农历${lunar.lYear}年${lunar.lMonth}月${lunar.lDay}日`;
-    } catch (error) {
-      console.error('农历转换错误:', error);
-      return dateStr; // 如果转换失败，返回原始日期
-    }
-  };
-
-  // 添加时辰转换函数
-  const getLunarTime = (timeStr) => {
-    if (!timeStr) return '';
-
-    const hour = parseInt(timeStr.split(':')[0]);
-
-    // 定义时辰对照表
-    const timeMap = {
-      23: '子时', 0: '子时',
-      1: '丑时', 2: '丑时',
-      3: '寅时', 4: '寅时',
-      5: '卯时', 6: '卯时',
-      7: '辰时', 8: '辰时',
-      9: '巳时', 10: '巳时',
-      11: '午时', 12: '午时',
-      13: '未时', 14: '未时',
-      15: '申时', 16: '申时',
-      17: '酉时', 18: '酉时',
-      19: '戌时', 20: '戌时',
-      21: '亥时', 22: '亥时'
-    };
-
-    return timeMap[hour] || '';
-  };
-
   const connectWebSocket = (formData) => {
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
@@ -79,7 +37,7 @@ const BirthInfoForm = () => {
       console.log('WebSocket Connected');
       const message = {
         action: "predict",
-        model: MODEL,
+        model: formData.model,
         prompt: `今天是 ${new Date().toLocaleDateString()}， 个人信息如下：${JSON.stringify(formData)}。分析我的八字和命理，分析结果包含：八字分析、五行分布、姓名分析，命理，运势（一生中的大运,大劫,当前运势），并提供建议。`
       };
       ws.send(JSON.stringify(message));
@@ -169,6 +127,21 @@ const BirthInfoForm = () => {
           layout="vertical"
           onFinish={onFinish}
         >
+          <Form.Item
+            name="model"
+            label="选择模型"
+            rules={[{ required: true, message: '请选择模型' }]}
+            initialValue="amazon.nova-pro-v1:0"
+          >
+            <Select>
+              {modelOptions.map(option => (
+                <Option key={option.value} value={option.value}>
+                  {option.label}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+
           <Form.Item
             name="name"
             label="姓名"

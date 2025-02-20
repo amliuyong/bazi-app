@@ -22,6 +22,10 @@ const Sidebar = () => {
       key: '/bone-weight',
       label: <Link href="/bone-weight">骨重算命</Link>,
     },
+    {
+      key: '/chat',
+      label: <Link href="/chat">智能对话</Link>,
+    },
   ];
 
   return (
