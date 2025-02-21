@@ -1,13 +1,5 @@
-'use client';
-
-import React from 'react';
-import BirthInfoForm from '../components/BirthInfoForm';
-import PageLayout from '../components/PageLayout';
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  return (
-    <PageLayout>
-      <BirthInfoForm />
-    </PageLayout>
-  );
+  redirect('/chat');
 } 

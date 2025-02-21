@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Select, Form, DatePicker, Button, Spin, Input } from 'antd';
+import { Select, Form, DatePicker, Input, Button, Spin } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import { WS_URL } from '../config';
 import { modelOptions } from '../config/models';
@@ -10,7 +10,26 @@ import { getLunarDate, getLunarTime } from '../utils/lunar';
 const { Option } = Select;
 const { TimePicker } = DatePicker;
 
-const NameAnalysisForm = () => {
+const nameCountOptions = [
+  { value: '2', label: '2字' },
+  { value: '3', label: '3字' },
+  { value: '4', label: '4字' },
+];
+
+const recommendCountOptions = [
+  { value: '5', label: '5个' },
+  { value: '10', label: '10个' },
+  { value: '15', label: '15个' },
+  { value: '20', label: '20个' },
+];
+
+// 获取名字字数的显示文本
+const getNameCountLabel = (value) => {
+  const option = nameCountOptions.find(opt => opt.value === value);
+  return option ? option.label : value;
+};
+
+const NamingForm = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
@@ -21,34 +40,38 @@ const NameAnalysisForm = () => {
   // 格式化个人信息
   const formatPersonalInfo = (formData) => {
     const gender = formData.gender === 'male' ? '男' : '女';
-    let info = `姓名：${formData.name}，性别：${gender}，出生时间：${formData.birthDate} ${formData.birthTime}，农历：${getLunarDate(formData.birthDate)} ${getLunarTime(formData.birthTime)}`;
+    let info = `姓氏：${formData.lastName}，性别：${gender}，出生时间：${formData.birthDate} ${formData.birthTime}，农历：${getLunarDate(formData.birthDate)} ${getLunarTime(formData.birthTime)}`;
+    
     if (formData.fatherName) {
       info += `，父亲姓名：${formData.fatherName}`;
     }
     if (formData.motherName) {
       info += `，母亲姓名：${formData.motherName}`;
     }
+    info += `，期望字数：${getNameCountLabel(formData.nameCount)}`;
+    info += `，推荐数量：${formData.recommendCount}个`;
+    
     return info;
   };
 
   // 生成分析提示模板
   const generatePrompt = (formData) => {
-    return `假设你是一位精通姓名学、八字和星座的大师，给我进行姓名分析，我的信息：${formatPersonalInfo(formData)}。
+    return `假设你是一位精通起名、八字和星座的大师，请帮我取名，我的信息：${formatPersonalInfo(formData)}。
 
-请按照以下方面进行分析：
-1. 姓名五行分析
-2. 姓名三才配置
-3. 姓名笔画分析
-4. 结合生辰八字分析姓名契合度
-5. 结合星座特征分析姓名寓意
-6. 姓名对个人发展的影响
-${formData.fatherName || formData.motherName ? '7. 姓名与父母姓名的关系分析：' : ''}
-${formData.fatherName ? '   - 与父亲姓名的五行配合' : ''}
-${formData.motherName ? '   - 与母亲姓名的五行配合' : ''}
-${formData.fatherName || formData.motherName ? '   - 家庭姓名整体能量场分析' : ''}
-7. 给出姓名综合评分（满分100分）
+请按照以下方面进行分析和起名：
+1. 八字分析：根据出生时间分析八字特征
+2. 五行分析：分析五行缺失和喜用神
+3. 星座分析：分析星座特征和性格倾向
+4. 姓名学分析：结合姓氏分析音律、字形、五行搭配
 
-最后请根据以上分析，结合生辰八字、星座特征，推荐10个高分候选名字(2个字或者3个字)，并说明每个名字的寓意和评分。
+根据以上分析，推荐${formData.recommendCount}个高分名字，每个名字需要：
+1. 完整解释名字的寓意
+2. 分析名字的五行配置
+3. 与八字的契合度
+4. 与星座特征的呼应
+5. 音律和美感分析
+6. 综合评分（满分100分）
+7. 对未来发展的影响
 
 今天是 ${new Date().toLocaleDateString()}, 请用专业且通俗易懂的语言进行分析。`;
   };
@@ -71,18 +94,15 @@ ${formData.fatherName || formData.motherName ? '   - 家庭姓名整体能量场
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
-
       if (data.type === 'error') {
         setStreamingResponse(`⚠️ 错误: ${data.message}`);
         setLoading(false);
         ws.close();
         return;
       }
-
       if (data.type === 'response' && data.content) {
         setStreamingResponse(prev => prev + data.content);
       }
-
       if (data.type === 'response' && data.done) {
         setLoading(false);
         ws.close();
@@ -101,43 +121,22 @@ ${formData.fatherName || formData.motherName ? '   - 家庭姓名整体能量场
     };
   };
 
-  const onFinish = async (values) => {
-    try {
-      setLoading(true);
-      setStreamingResponse('');
-
-      const formattedDate = values.birthDate?.format('YYYY-MM-DD');
-      const formattedTime = values.birthTime?.format('HH:mm');
-
-      const formData = {
-        ...values,
-        birthDate: formattedDate,
-        birthTime: formattedTime,
-        lunarDate: getLunarDate(formattedDate),
-      };
-
-      setSubmittedData(formData);
-      connectWebSocket(formData);
-    } catch (error) {
-      console.error('提交失败:', error);
-      alert('提交失败，请重试！');
-      setLoading(false);
-    }
-  };
-
-  React.useEffect(() => {
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+  const onFinish = (values) => {
+    const formData = {
+      ...values,
+      birthDate: values.birthDate.format('YYYY-MM-DD'),
+      birthTime: values.birthTime.format('HH:mm'),
     };
-  }, []);
+    
+    setLoading(true);
+    setSubmittedData(formData);
+    setStreamingResponse('');
+    connectWebSocket(formData);
+  };
 
   return (
     <div className="flex gap-6">
-      {/* 左侧表单 */}
-      <div className="w-[400px] bg-white p-6 rounded-lg shadow-sm">
-        <h2 className="text-lg font-medium mb-6">姓名分析</h2>
+      <div className="w-96 bg-white p-6 rounded-lg shadow-sm">
         <Form
           form={form}
           layout="vertical"
@@ -159,11 +158,11 @@ ${formData.fatherName || formData.motherName ? '   - 家庭姓名整体能量场
           </Form.Item>
 
           <Form.Item
-            name="name"
-            label="姓名"
-            rules={[{ required: true, message: '请输入姓名' }]}
+            name="lastName"
+            label="姓氏"
+            rules={[{ required: true, message: '请输入姓氏' }]}
           >
-            <Input placeholder="请输入姓名" />
+            <Input placeholder="请输入姓氏" />
           </Form.Item>
 
           <Form.Item
@@ -199,6 +198,35 @@ ${formData.fatherName || formData.motherName ? '   - 家庭姓名整体能量场
           </Form.Item>
 
           <Form.Item
+            name="nameCount"
+            label="名字字数"
+            rules={[{ required: true, message: '请选择名字字数' }]}
+          >
+            <Select placeholder="请选择名字字数">
+              {nameCountOptions.map(option => (
+                <Option key={option.value} value={option.value}>
+                  {option.label}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="recommendCount"
+            label="推荐姓名个数"
+            rules={[{ required: true, message: '请选择推荐姓名个数' }]}
+            initialValue="10"
+          >
+            <Select placeholder="请选择推荐姓名个数">
+              {recommendCountOptions.map(option => (
+                <Option key={option.value} value={option.value}>
+                  {option.label}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
             name="fatherName"
             label="父亲姓名（可选）"
           >
@@ -220,16 +248,17 @@ ${formData.fatherName || formData.motherName ? '   - 家庭姓名整体能量场
         </Form>
       </div>
 
-      {/* 右侧结果显示 */}
       <div className="flex-1">
         {submittedData ? (
           <div className="bg-white p-6 rounded-lg shadow-sm">
             <h2 className="text-lg font-medium mb-4">个人信息</h2>
             <div className="mb-6 text-sm">
-              <p className="mb-2"><strong>姓名：</strong>{submittedData.name}</p>
+              <p className="mb-2"><strong>姓氏：</strong>{submittedData.lastName}</p>
               <p className="mb-2"><strong>性别：</strong>{submittedData.gender === 'male' ? '男' : '女'}</p>
               <p className="mb-2"><strong>公历：</strong>{submittedData.birthDate} {submittedData.birthTime}</p>
-              <p className="mb-2"><strong>农历：</strong>{submittedData.lunarDate} {getLunarTime(submittedData.birthTime)}</p>
+              <p className="mb-2"><strong>农历：</strong>{getLunarDate(submittedData.birthDate)} {getLunarTime(submittedData.birthTime)}</p>
+              <p className="mb-2"><strong>名字字数：</strong>{getNameCountLabel(submittedData.nameCount)}</p>
+              <p className="mb-2"><strong>推荐个数：</strong>{submittedData.recommendCount}个</p>
               {submittedData.fatherName && (
                 <p className="mb-2"><strong>父亲姓名：</strong>{submittedData.fatherName}</p>
               )}
@@ -267,4 +296,4 @@ ${formData.fatherName || formData.motherName ? '   - 家庭姓名整体能量场
   );
 };
 
-export default NameAnalysisForm; 
+export default NamingForm; 

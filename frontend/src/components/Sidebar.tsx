@@ -37,6 +37,11 @@ const menuItems: MenuItem[] = [
     icon: React.createElement(UserOutlined),
     label: <Link href="/name">姓名分析</Link>,
   },
+  {
+    key: '/naming',
+    icon: <UserOutlined />,
+    label: <Link href="/naming">AI 取名</Link>,
+  },
 ];
 
 const Sidebar = () => {
