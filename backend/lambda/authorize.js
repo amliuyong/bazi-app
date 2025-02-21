@@ -3,20 +3,19 @@ export const handler = async (event) => {
   
   try {
     // Get the Authorization header from event.headers
-    const authHeader = event.headers.Authorization || event.headers.authorization;
+    const authHeader = event.queryStringParameters.Authorization || event.headers.authorization;
     
     if (!authHeader) {
       return generatePolicy('user', 'Deny', event.methodArn);
     }
 
     // Check if it's a Bearer token and matches our test token
-    const [bearer, token] = authHeader.split(' ');
-    if (bearer.toLowerCase() !== 'bearer' || token !== 'test API') {
-      return generatePolicy('user', 'Deny', event.methodArn);
+    console.log('authHeader:', authHeader);
+    if (authHeader == 'Bearer test API') {
+      return generatePolicy('user', 'Allow', event.methodArn);
     }
 
-    // If token is valid, generate an Allow policy
-    return generatePolicy('user', 'Allow', event.methodArn);
+    return generatePolicy('user', 'Deny', event.methodArn);
   } catch (error) {
     console.error('Auth Error:', error);
     return generatePolicy('user', 'Deny', event.methodArn);
@@ -40,6 +39,8 @@ const generatePolicy = (principalId, effect, resource) => {
     };
     authResponse.policyDocument = policyDocument;
   }
+
+  console.log('Auth response:', JSON.stringify(authResponse));
   
   return authResponse;
 }; 
