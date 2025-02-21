@@ -28,19 +28,19 @@ export class BackendStack extends Stack {
     });
 
     // 创建 VPC
-    const vpc = new ec2.Vpc(this, 'OllamaVpc', {
+    const vpc = new ec2.Vpc(this, 'BaziVpc', {
       maxAzs: 2,
       natGateways: 1,
     });
 
     // 创建 ECS 集群
-    const cluster = new ecs.Cluster(this, 'OllamaCluster', {
+    const cluster = new ecs.Cluster(this, 'BaziBackendCluster', {
       vpc,
       containerInsights: true,
     });
 
     // 创建任务执行角色
-    const taskExecutionRole = new iam.Role(this, 'OllamaTaskExecutionRole', {
+    const taskExecutionRole = new iam.Role(this, 'ecsTaskExecutionRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       description: 'Role that the ECS service will use to pull images and write logs',
     });
@@ -214,25 +214,28 @@ export class BackendStack extends Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${webSocketApi.apiId}/authorizers/*`
     });
 
-    // 创建 WebSocket Stage
+    // Create WebSocket Stage first
     const stage = new apigatewayv2.WebSocketStage(this, 'OllamaWebSocketStage', {
       webSocketApi,
       stageName: 'prod',
       autoDeploy: true,
     });
 
+    // Get the WebSocket URL
+    const wsUrl = `wss://${webSocketApi.apiId}.execute-api.${this.region}.amazonaws.com/prod`;
+
     // 给 Lambda 添加发送消息的权限
-    predictFunction.addEnvironment('WEBSOCKET_ENDPOINT', stage.url);
+    predictFunction.addEnvironment('WEBSOCKET_ENDPOINT', wsUrl);
     predictFunction.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ['execute-api:ManageConnections'],
       resources: [`arn:aws:execute-api:${this.region}:${this.account}:${webSocketApi.apiId}/*`],
     }));
 
-    // 为前端创建 Docker 镜像
+    // 为前端创建 Docker 镜像 (without buildArgs)
     const frontendImage = new ecr_assets.DockerImageAsset(this, 'FrontendImage', {
       directory: join(__dirname, '../../frontend'),
-      file: 'Dockerfile',
+      file: 'Dockerfile'
     });
 
     // 创建前端服务
@@ -245,7 +248,7 @@ export class BackendStack extends Stack {
         image: ecs.ContainerImage.fromDockerImageAsset(frontendImage),
         containerPort: 3000,
         environment: {
-          NEXT_PUBLIC_WS_URL: stage.url,  // WebSocket API URL
+          NEXT_PUBLIC_WS_URL: wsUrl,
         },
       },
       publicLoadBalancer: true,
@@ -265,7 +268,7 @@ export class BackendStack extends Stack {
 
     // 输出 WebSocket URL
     new cdk.CfnOutput(this, 'WebSocketUrl', {
-      value: stage.url,
+      value: wsUrl,
       description: 'WebSocket API endpoint URL',
     });
 

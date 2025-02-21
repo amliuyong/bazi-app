@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import AntdRegistry from '@/providers/AntdRegistry';
-import RootLayout from '@/components/RootLayout';
+import AppLayout from '@/components/RootLayout';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,16 +30,20 @@ export const metadata: Metadata = {
   },
 };
 
-export default function Layout({
+export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
     <html lang="zh">
+      <head>
+        <script src="/env.js" />
+        <script src="/env-config.js" />
+      </head>
       <body className={inter.className}>
         <AntdRegistry>
-          <RootLayout>{children}</RootLayout>
+          <AppLayout>{children}</AppLayout>
         </AntdRegistry>
       </body>
     </html>

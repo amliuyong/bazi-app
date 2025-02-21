@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # 安装依赖
-RUN npm ci
+RUN npm install
 
 # 复制源代码
 COPY . .
@@ -22,16 +22,23 @@ WORKDIR /app
 
 # 从构建阶段复制必要文件
 COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/node_modules ./node_modules
 
 # 设置环境变量
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV HOSTNAME "0.0.0.0"
 
 # 暴露端口
 EXPOSE 3000
 
+# 创建启动脚本
+RUN echo '#!/bin/sh' > /app/start.sh && \
+    echo 'echo "window.ENV = { NEXT_PUBLIC_WS_URL: \"$NEXT_PUBLIC_WS_URL?Authorization=Bearer test API\" };" > /app/public/env-config.js' >> /app/start.sh && \
+    echo 'exec node server.js' >> /app/start.sh && \
+    chmod +x /app/start.sh
+
 # 启动应用
-CMD ["npm", "start"] 
+CMD ["/app/start.sh"] 

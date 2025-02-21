@@ -1,3 +1,4 @@
+// @ts-ignore
 import solarLunar from 'solarlunar';
 
 // 阳历转阴历的函数
