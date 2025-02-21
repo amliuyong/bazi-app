@@ -28,7 +28,6 @@ const ChatForm = () => {
   }, [messages, currentResponse]);
 
   const connectWebSocket = (formData) => {
-    // 确保之前的连接已关闭
     if (wsRef.current) {
       wsRef.current.close();
     }

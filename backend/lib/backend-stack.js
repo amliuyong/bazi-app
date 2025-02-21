@@ -12,6 +12,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import * as apigatewayv2 from '@aws-cdk/aws-apigatewayv2-alpha';
 import * as apigatewayv2_integrations from '@aws-cdk/aws-apigatewayv2-integrations-alpha';
+import { WebSocketLambdaAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -161,7 +162,19 @@ export class BackendStack extends Stack {
       ],
     }));
 
-    // 创建 WebSocket API
+    // 创建 Authorizer Lambda
+    const authorizerFunction = new NodejsFunction(this, 'AuthorizerFunction', {
+      runtime: Runtime.NODEJS_18_X,
+      entry: join(__dirname, '../lambda/authorize.js'),
+      handler: 'handler',
+    });
+
+    // Create the authorizer 
+    const authorizer = new WebSocketLambdaAuthorizer('Authorizer', authorizerFunction, {
+      identitySource: ['route.request.querystring.Authorization']
+    });
+
+    // 创建 WebSocket API with authorizer on $connect route
     const webSocketApi = new apigatewayv2.WebSocketApi(this, 'OllamaWebSocketApi', {
       connectRouteOptions: {
         integration: new apigatewayv2_integrations.WebSocketLambdaIntegration(
@@ -172,6 +185,7 @@ export class BackendStack extends Stack {
             handler: 'handler',
           })
         ),
+        authorizer  // Add authorizer only to connect route
       },
       disconnectRouteOptions: {
         integration: new apigatewayv2_integrations.WebSocketLambdaIntegration(
@@ -185,12 +199,18 @@ export class BackendStack extends Stack {
       },
     });
 
-    // 添加预测消息路由
+    // Add predict route without authorizer
     webSocketApi.addRoute('predict', {
       integration: new apigatewayv2_integrations.WebSocketLambdaIntegration(
         'PredictIntegration',
         predictFunction
-      ),
+      )
+    });
+
+    // 给 authorizer lambda 添加权限
+    authorizerFunction.addPermission('InvokeByApiGateway', {
+      principal: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${webSocketApi.apiId}/authorizers/*`
     });
 
     // 创建 WebSocket Stage
