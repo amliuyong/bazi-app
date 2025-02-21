@@ -38,7 +38,6 @@ export default function RootLayout({
   return (
     <html lang="zh">
       <head>
-        <script src="/env.js" />
         <script src="/env-config.js" />
       </head>
       <body className={inter.className}>
