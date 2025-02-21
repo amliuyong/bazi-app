@@ -1,13 +1,12 @@
 'use client';
 
 import React from 'react';
-import AstrologyForm from '../../components/AstrologyForm';
-import PageLayout from '../../components/PageLayout';
+import AstrologyForm from '@/components/AstrologyForm';
 
-export default function Astrology() {
+export default function AstrologyPage() {
   return (
-    <PageLayout>
+    <main className="min-h-screen p-8">
       <AstrologyForm />
-    </PageLayout>
+    </main>
   );
 } 

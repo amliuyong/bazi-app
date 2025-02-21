@@ -14,7 +14,31 @@ const BoneWeightForm = () => {
   const [loading, setLoading] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
   const [streamingResponse, setStreamingResponse] = useState('');
+  const [currentPrompt, setCurrentPrompt] = useState('');
   const wsRef = useRef(null);
+
+  // 格式化个人信息
+  const formatPersonalInfo = (formData) => {
+    return `出生时间：${formData.birthDate} ${formData.birthTime}，农历：${getLunarDate(formData.birthDate)} ${getLunarTime(formData.birthTime)}`;
+  };
+
+  // 生成分析提示模板
+  const generatePrompt = (formData) => {
+    return `假设你是一位精通骨重算命的大师，给我进行骨重算命分析，我的信息：${formatPersonalInfo(formData)}。
+
+请按照以下方面进行分析：
+1. 计算骨重值
+2. 骨重特征解读
+3. 先天禀赋分析
+4. 性格特点描述
+5. 事业发展方向
+6. 财运和理财建议
+7. 健康状况提醒
+8. 感情婚姻分析
+9. 今年运势预测
+
+今天是 ${new Date().toLocaleDateString()}, 请给出详细的分析和实用的建议，用通俗易懂的语言表达。`;
+  };
 
   const connectWebSocket = (formData) => {
     const ws = new WebSocket(WS_URL);
@@ -22,10 +46,13 @@ const BoneWeightForm = () => {
 
     ws.onopen = () => {
       console.log('WebSocket Connected');
+      const prompt = generatePrompt(formData);
+      setCurrentPrompt(prompt);
+      
       const message = {
         action: "predict",
         model: formData.model,
-        prompt: `今天是 ${new Date().toLocaleDateString()}，个人信息如下：${JSON.stringify(formData)}。请根据骨重算命理论，分析此人的命理，并提供相应的建议。`
+        prompt: prompt
       };
       ws.send(JSON.stringify(message));
     };
@@ -157,6 +184,11 @@ const BoneWeightForm = () => {
               <p className="mb-2"><strong>公历出生时间：</strong>{submittedData.birthTime}</p>
               <p className="mb-2"><strong>阴历出生日期：</strong>{submittedData.lunarDate}</p>
               <p className="mb-2"><strong>阴历出生时间：</strong>{submittedData.lunarTime}</p>
+            </div>
+
+            <h2 className="text-lg font-medium mb-4">分析提示</h2>
+            <div className="mb-6 p-4 bg-gray-50 rounded text-sm font-mono whitespace-pre-wrap">
+              {currentPrompt}
             </div>
 
             <h2 className="text-lg font-medium mb-4">分析结果</h2>

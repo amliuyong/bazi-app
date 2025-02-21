@@ -15,6 +15,7 @@ const AstrologyForm = () => {
   const [selectedProvince, setSelectedProvince] = useState('');
   const [submittedData, setSubmittedData] = useState(null);
   const [streamingResponse, setStreamingResponse] = useState('');
+  const [currentPrompt, setCurrentPrompt] = useState('');
   const wsRef = useRef(null);
 
   const onProvinceChange = (value) => {
@@ -27,16 +28,35 @@ const AstrologyForm = () => {
     return cityData[selectedProvince]?.cities || [];
   };
 
+  // 格式化个人信息
+  const formatPersonalInfo = (formData) => {
+    const gender = formData.gender === 'male' ? '男' : '女';
+    return `姓名：${formData.name}，性别：${gender}，出生时间：${formData.birthDate} ${formData.birthTime}，出生地点：${formData.province}${formData.city}`;
+  };
+
+  // 生成分析提示模板
+  const generatePrompt = (formData) => {
+    return `假设你是一位著名的星座大师，给我进行星座和运势分析，我的信息：${formatPersonalInfo(formData)}。
+先根据我的出生日期和时间计算太阳星座，月亮星座，上升星座。
+请根据的星座特征，结合 MBTI 性格分析，描述这个星座的典型性格特征、优缺点、适合的职业、恋爱风格，并提供 3 条建议帮助他们更好地成长。
+结合星座和塔罗牌，请提供运势解析，并给予实用建议。
+今天是 ${new Date().toLocaleDateString()}, 提供今年，今月，今日运势，幸运数，幸运色。
+语言生动、有趣，带点幽默感。`;
+  };
+
   const connectWebSocket = (formData) => {
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
     ws.onopen = () => {
       console.log('WebSocket Connected');
+      const prompt = generatePrompt(formData);
+      setCurrentPrompt(prompt);
+      
       const message = {
         action: "predict",
         model: formData.model,
-        prompt: `今天是 ${new Date().toLocaleDateString()}，个人信息如下：${JSON.stringify(formData)}。分析我的星座运势，分析结果包含：星座特点、性格分析、爱情观、事业发展、月亮星座、上升星座、今年运势、建议等。`
+        prompt: prompt
       };
       ws.send(JSON.stringify(message));
     };
@@ -225,25 +245,15 @@ const AstrologyForm = () => {
               <p className="mb-2"><strong>出生地点：</strong>{submittedData.province} {submittedData.city}</p>
             </div>
 
+            <h2 className="text-lg font-medium mb-4">分析提示</h2>
+            <div className="mb-6 p-4 bg-gray-50 rounded text-sm font-mono whitespace-pre-wrap">
+              {currentPrompt}
+            </div>
+
             <h2 className="text-lg font-medium mb-4">分析结果</h2>
-            <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="prose max-w-none">
               {streamingResponse ? (
-                <ReactMarkdown
-                  className="prose prose-sm max-w-none"
-                  components={{
-                    h1: ({node, ...props}) => <h1 className="text-xl font-bold my-4" {...props} />,
-                    h2: ({node, ...props}) => <h2 className="text-lg font-bold my-3" {...props} />,
-                    h3: ({node, ...props}) => <h3 className="text-base font-bold my-2" {...props} />,
-                    p: ({node, ...props}) => <p className="my-2 leading-relaxed" {...props} />,
-                    ul: ({node, ...props}) => <ul className="my-2 pl-6 list-disc" {...props} />,
-                    ol: ({node, ...props}) => <ol className="my-2 pl-6 list-decimal" {...props} />,
-                    code: ({node, inline, ...props}) => (
-                      inline ? 
-                        <code className="bg-gray-100 px-1 py-0.5 rounded" {...props} /> :
-                        <code className="block bg-gray-100 p-4 rounded my-2" {...props} />
-                    ),
-                  }}
-                >
+                <ReactMarkdown>
                   {streamingResponse}
                 </ReactMarkdown>
               ) : (

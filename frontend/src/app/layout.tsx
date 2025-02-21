@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import AntdRegistry from '@/providers/AntdRegistry';
+import RootLayout from '@/components/RootLayout';
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "个人信息登记",
-  description: "个人信息登记表单",
+  title: "AI 命理",
+  description: "AI 命理分析系统",
   icons: {
     icon: '/favicon.ico',
     shortcut: '/favicon.ico',
@@ -29,7 +30,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default function Layout({
   children,
 }: {
   children: React.ReactNode;
@@ -37,7 +38,9 @@ export default function RootLayout({
   return (
     <html lang="zh">
       <body className={inter.className}>
-        <AntdRegistry>{children}</AntdRegistry>
+        <AntdRegistry>
+          <RootLayout>{children}</RootLayout>
+        </AntdRegistry>
       </body>
     </html>
   );

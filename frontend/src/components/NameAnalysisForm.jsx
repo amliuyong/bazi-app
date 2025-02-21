@@ -1,56 +1,44 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Select, Form, Input, Button, DatePicker, TimePicker, Spin } from 'antd';
-import { provinces, cityData } from '../data/cities';
+import { Select, Form, DatePicker, Button, Spin, Input } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import { WS_URL } from '../config';
 import { modelOptions } from '../config/models';
-import { getLunarDate, getLunarTime } from '../utils/lunar';
+import { getLunarDate } from '../utils/lunar';
 
 const { Option } = Select;
 
-
-const BirthInfoForm = () => {
+const NameAnalysisForm = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [selectedProvince, setSelectedProvince] = useState('');
   const [submittedData, setSubmittedData] = useState(null);
   const [streamingResponse, setStreamingResponse] = useState('');
-  const wsRef = useRef(null);
   const [currentPrompt, setCurrentPrompt] = useState('');
-
-  const onProvinceChange = (value) => {
-    setSelectedProvince(value);
-    form.setFieldValue('city', undefined); // 清空城市选择
-  };
-
-  const getCities = () => {
-    if (!selectedProvince) return [];
-    return cityData[selectedProvince]?.cities || [];
-  };
+  const wsRef = useRef(null);
 
   // 格式化个人信息
   const formatPersonalInfo = (formData) => {
     const gender = formData.gender === 'male' ? '男' : '女';
-    return `姓名：${formData.name}，性别：${gender}，出生时间：${formData.birthDate} ${formData.birthTime}，出生地点：${formData.province}${formData.city}，农历：${getLunarDate(formData.birthDate)} ${getLunarTime(formData.birthTime)}`;
+    return `姓名：${formData.name}，性别：${gender}，出生时间：${formData.birthDate}，农历：${getLunarDate(formData.birthDate)}`;
   };
 
   // 生成分析提示模板
   const generatePrompt = (formData) => {
-    return `假设你是一位著名的八字分析大师，给我进行八字分析，我的信息：${formatPersonalInfo(formData)}。
+    return `假设你是一位精通姓名学、八字和星座的大师，给我进行姓名分析，我的信息：${formatPersonalInfo(formData)}。
 
-请根据生辰八字分析：
-1. 八字排盘
-2. 五行属性分析
-3. 性格特点和潜在优势
-4. 事业发展方向和建议
-5. 财运分析和理财建议
-6. 健康状况和养生之道
-7. 感情姻缘分析
-8. 今年运势分析
+请按照以下方面进行分析：
+1. 姓名五行分析
+2. 姓名三才配置
+3. 姓名笔画分析
+4. 结合生辰八字分析姓名契合度
+5. 结合星座特征分析姓名寓意
+6. 姓名对个人发展的影响
+7. 给出姓名综合评分（满分100分）
 
-今天是 ${new Date().toLocaleDateString()}, 请给出详细的解释和具体的建议，语言要通俗易懂。`;
+最后请根据以上分析，结合生辰八字、星座特征，推荐10个高分候选名字(2个字或者3个字)，并说明每个名字的寓意和评分。
+
+今天是 ${new Date().toLocaleDateString()}, 请用专业且通俗易懂的语言进行分析。`;
   };
 
   const connectWebSocket = (formData) => {
@@ -72,7 +60,6 @@ const BirthInfoForm = () => {
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
-      // 处理错误消息
       if (data.type === 'error') {
         setStreamingResponse(`⚠️ 错误: ${data.message}`);
         setLoading(false);
@@ -80,12 +67,10 @@ const BirthInfoForm = () => {
         return;
       }
 
-      // 处理正常响应
       if (data.type === 'response' && data.content) {
         setStreamingResponse(prev => prev + data.content);
       }
 
-      // 检查是否是最后一条消息
       if (data.type === 'response' && data.done) {
         setLoading(false);
         ws.close();
@@ -107,23 +92,15 @@ const BirthInfoForm = () => {
   const onFinish = async (values) => {
     try {
       setLoading(true);
-      setStreamingResponse(''); // Clear previous response
+      setStreamingResponse('');
 
-      // Format the date and time
       const formattedDate = values.birthDate?.format('YYYY-MM-DD');
-      const formattedTime = values.birthTime?.format('HH:mm');
 
       const formData = {
         ...values,
         birthDate: formattedDate,
-        birthTime: formattedTime,
-        province: cityData[values.province]?.label,
-        city: getCities().find(city => city.value === values.city)?.label,
         lunarDate: getLunarDate(formattedDate),
-        lunarTime: getLunarTime(formattedTime),
       };
-
-      console.log(formData);
 
       setSubmittedData(formData);
       connectWebSocket(formData);
@@ -134,7 +111,6 @@ const BirthInfoForm = () => {
     }
   };
 
-  // Cleanup WebSocket on component unmount
   React.useEffect(() => {
     return () => {
       if (wsRef.current) {
@@ -147,7 +123,7 @@ const BirthInfoForm = () => {
     <div className="flex gap-6">
       {/* 左侧表单 */}
       <div className="w-[400px] bg-white p-6 rounded-lg shadow-sm">
-        <h2 className="text-lg font-medium mb-6">个人信息登记表</h2>
+        <h2 className="text-lg font-medium mb-6">姓名分析</h2>
         <Form
           form={form}
           layout="vertical"
@@ -189,57 +165,15 @@ const BirthInfoForm = () => {
 
           <Form.Item
             name="birthDate"
-            label="公历出生日期"
+            label="出生日期"
             rules={[{ required: true, message: '请选择出生日期' }]}
           >
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
 
-          <Form.Item
-            name="birthTime"
-            label="公历出生时间"
-            rules={[{ required: true, message: '请选择出生时间' }]}
-          >
-            <TimePicker style={{ width: '100%' }} format="HH:mm" />
-          </Form.Item>
-
-          <Form.Item
-            name="province"
-            label="出生省份"
-            rules={[{ required: true, message: '请选择出生省份' }]}
-          >
-            <Select
-              placeholder="请选择省份"
-              onChange={onProvinceChange}
-            >
-              {provinces.map(province => (
-                <Option key={province.value} value={province.value}>
-                  {province.label}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            name="city"
-            label="出生城市"
-            rules={[{ required: true, message: '请选择出生城市' }]}
-          >
-            <Select
-              placeholder="请选择城市"
-              disabled={!selectedProvince}
-            >
-              {getCities().map(city => (
-                <Option key={city.value} value={city.value}>
-                  {city.label}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-
           <Form.Item>
             <Button type="primary" htmlType="submit" loading={loading} block>
-              提交
+              开始分析
             </Button>
           </Form.Item>
         </Form>
@@ -254,10 +188,7 @@ const BirthInfoForm = () => {
               <p className="mb-2"><strong>姓名：</strong>{submittedData.name}</p>
               <p className="mb-2"><strong>性别：</strong>{submittedData.gender === 'male' ? '男' : '女'}</p>
               <p className="mb-2"><strong>公历出生日期：</strong>{submittedData.birthDate}</p>
-              <p className="mb-2"><strong>公历出生时间：</strong>{submittedData.birthTime}</p>
-              <p className="mb-2"><strong>出生地点：</strong>{submittedData.province} {submittedData.city}</p>
-              <p className="mb-2"><strong>阴历出生日期：</strong>{submittedData.lunarDate}</p>
-              <p className="mb-2"><strong>阴历出生时间：</strong>{submittedData.lunarTime}</p>
+              <p className="mb-2"><strong>农历出生日期：</strong>{submittedData.lunarDate}</p>
             </div>
 
             <h2 className="text-lg font-medium mb-4">分析提示</h2>
@@ -266,24 +197,9 @@ const BirthInfoForm = () => {
             </div>
 
             <h2 className="text-lg font-medium mb-4">分析结果</h2>
-            <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="prose max-w-none">
               {streamingResponse ? (
-                <ReactMarkdown
-                  className="prose prose-sm max-w-none"
-                  components={{
-                    h1: ({node, ...props}) => <h1 className="text-xl font-bold my-4" {...props} />,
-                    h2: ({node, ...props}) => <h2 className="text-lg font-bold my-3" {...props} />,
-                    h3: ({node, ...props}) => <h3 className="text-base font-bold my-2" {...props} />,
-                    p: ({node, ...props}) => <p className="my-2 leading-relaxed" {...props} />,
-                    ul: ({node, ...props}) => <ul className="my-2 pl-6 list-disc" {...props} />,
-                    ol: ({node, ...props}) => <ol className="my-2 pl-6 list-decimal" {...props} />,
-                    code: ({node, inline, ...props}) => (
-                      inline ? 
-                        <code className="bg-gray-100 px-1 py-0.5 rounded" {...props} /> :
-                        <code className="block bg-gray-100 p-4 rounded my-2" {...props} />
-                    ),
-                  }}
-                >
+                <ReactMarkdown>
                   {streamingResponse}
                 </ReactMarkdown>
               ) : (
@@ -304,4 +220,4 @@ const BirthInfoForm = () => {
   );
 };
 
-export default BirthInfoForm; 
+export default NameAnalysisForm; 

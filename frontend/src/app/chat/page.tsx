@@ -1,13 +1,13 @@
 'use client';
 
 import React from 'react';
-import ChatForm from '../../components/ChatForm';
+import ChatForm from '@/components/ChatForm';
 import PageLayout from '../../components/PageLayout';
 
-export default function Chat() {
+export default function ChatPage() {
   return (
-    <PageLayout>
+    <main className="min-h-screen p-8">
       <ChatForm />
-    </PageLayout>
+    </main>
   );
 } 
