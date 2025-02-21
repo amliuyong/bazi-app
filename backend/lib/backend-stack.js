@@ -13,6 +13,7 @@ import { dirname, join } from 'path';
 import * as apigatewayv2 from '@aws-cdk/aws-apigatewayv2-alpha';
 import * as apigatewayv2_integrations from '@aws-cdk/aws-apigatewayv2-integrations-alpha';
 import { WebSocketLambdaAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers';
+import { CfnOutput } from 'aws-cdk-lib';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -228,6 +229,39 @@ export class BackendStack extends Stack {
       resources: [`arn:aws:execute-api:${this.region}:${this.account}:${webSocketApi.apiId}/*`],
     }));
 
+    // 为前端创建 Docker 镜像
+    const frontendImage = new ecr_assets.DockerImageAsset(this, 'FrontendImage', {
+      directory: join(__dirname, '../../frontend'),
+      file: 'Dockerfile',
+    });
+
+    // 创建前端服务
+    const frontendService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'FrontendService', {
+      cluster,
+      cpu: 512,
+      memoryLimitMiB: 1024,
+      desiredCount: 1,
+      taskImageOptions: {
+        image: ecs.ContainerImage.fromDockerImageAsset(frontendImage),
+        containerPort: 3000,
+        environment: {
+          NEXT_PUBLIC_WS_URL: stage.url,  // WebSocket API URL
+        },
+      },
+      publicLoadBalancer: true,
+    });
+
+    // 配置健康检查
+    frontendService.targetGroup.configureHealthCheck({
+      path: '/',
+      healthyHttpCodes: '200,301,302',
+    });
+
+    // 输出前端服务的 URL
+    new CfnOutput(this, 'FrontendURL', {
+      value: frontendService.loadBalancer.loadBalancerDnsName,
+      description: 'Frontend Application URL',
+    });
 
     // 输出 WebSocket URL
     new cdk.CfnOutput(this, 'WebSocketUrl', {
