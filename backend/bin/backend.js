@@ -4,7 +4,13 @@ import { BackendStack } from '../lib/backend-stack.js';
 
 const app = new cdk.App();
 // get stack name from context 
-new BackendStack(app, 'BaziStack', {
+const stackName = app.node.tryGetContext('stackName', 'BaziStack');
+
+if (!stackName) {
+  throw new Error('stackName is required');
+}
+
+new BackendStack(app, stackName, {
   /* If you don't specify 'env', this stack will be environment-agnostic.
    * Account/Region-dependent features and context lookups will not work,
    * but a single synthesized template can be deployed anywhere. */

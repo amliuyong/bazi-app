@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import AntdRegistry from '@/providers/AntdRegistry';
 import AppLayout from '@/components/RootLayout';
+import Script from 'next/script';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -38,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="zh">
       <head>
-        <script src="/env-config.js" />
+        <Script src="/env-config.js" strategy="beforeInteractive" />
       </head>
       <body className={inter.className}>
         <AntdRegistry>

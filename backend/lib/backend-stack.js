@@ -95,16 +95,27 @@ export class BackendStack extends Stack {
       },
     });
 
-    // 创建 Fargate 服务
+    // 创建 Ollama 服务安全组
+    const ollamaSecurityGroup = new ec2.SecurityGroup(this, 'OllamaSecurityGroup', {
+      vpc,
+      description: 'Security group for Ollama service',
+      allowAllOutbound: true
+    });
+
+    // 创建 Fargate 服务 (完全私有)
     const fargateService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'OllamaService', {
       cluster,
       taskDefinition,
       desiredCount: 1,
-      publicLoadBalancer: true,
+      publicLoadBalancer: false,  // 设置为私有负载均衡器
       listenerPort: 11434,
       targetProtocol: ecs.Protocol.HTTP,
-      assignPublicIp: true,
+      assignPublicIp: false,  // 不分配公网IP
       healthCheckGracePeriod: Duration.seconds(600),
+      taskSubnets: {
+        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS  // 使用私有子网
+      },
+      securityGroups: [ollamaSecurityGroup]
     });
 
     // 配置目标组 - 增加超时时间
@@ -120,16 +131,35 @@ export class BackendStack extends Stack {
       }
     ];
 
-    // 配置安全组
-    fargateService.service.connections.allowFromAnyIpv4(ec2.Port.tcp(11434), 'Allow Ollama API access');
+    // 创建安全组
+    const lambdaSecurityGroup = new ec2.SecurityGroup(this, 'LambdaSecurityGroup', {
+      vpc,
+      description: 'Security group for Lambda functions',
+      allowAllOutbound: true
+    });
 
-    // 创建 Lambda 函数
+    // 配置安全组规则 - 只允许来自 Lambda 的访问
+    ollamaSecurityGroup.addIngressRule(
+      lambdaSecurityGroup,
+      ec2.Port.tcp(11434),
+      'Allow access from Lambda'
+    );
+
+    // 移除允许任何 IP 访问的规则
+    // fargateService.service.connections.allowFromAnyIpv4(ec2.Port.tcp(11434), 'Allow Ollama API access');
+
+    // 创建 Lambda 函数 (in VPC)
     const predictFunction = new NodejsFunction(this, 'PredictFunction', {
       runtime: Runtime.NODEJS_18_X,
       entry: join(__dirname, '../lambda/predict.js'),
       handler: 'handler',
       timeout: Duration.seconds(900),
-      memorySize: 256,
+      memorySize: 1024,
+      vpc: vpc,
+      vpcSubnets: {
+        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
+      },
+      securityGroups: [lambdaSecurityGroup],
       environment: {
         OLLAMA_API_URL: `http://${fargateService.loadBalancer.loadBalancerDnsName}:11434`,
       },
@@ -140,28 +170,60 @@ export class BackendStack extends Stack {
       },
     });
 
+    // 添加 VPC 权限
+    predictFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'ec2:CreateNetworkInterface',
+        'ec2:DescribeNetworkInterfaces',
+        'ec2:DeleteNetworkInterface',
+        'ec2:AssignPrivateIpAddresses',
+        'ec2:UnassignPrivateIpAddresses'
+      ],
+      resources: ['*']
+    }));
+
     // 添加 Bedrock 调用权限
     predictFunction.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: [
-        'bedrock:*',
+        'bedrock:InvokeModel',
+        'bedrock:InvokeModelWithResponseStream',
+        'bedrock:ListFoundationModels',
+        'bedrock:GetFoundationModel'
       ],
       resources: [
-        `arn:aws:bedrock:${this.region}::foundation-model/*`,
-      ],
+        `arn:aws:bedrock:${this.region}:*:foundation-model/*`,
+        `arn:aws:bedrock:${this.region}:${this.account}:foundation-model/*`
+      ]
     }));
 
-    // 添加 Parameter Store 访问权限
-    predictFunction.addToRolePolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'ssm:GetParameter',
-        'ssm:GetParameters'
-      ],
-      resources: [
-        `arn:aws:ssm:${this.region}:${this.account}:parameter/openai/api-key`
-      ],
-    }));
+    // 添加 VPC 端点
+    vpc.addInterfaceEndpoint('BedrockEndpoint', {
+      service: new ec2.InterfaceVpcEndpointService(`com.amazonaws.${this.region}.bedrock-runtime`, 443),
+      subnets: {
+        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
+      },
+      privateDnsEnabled: true,
+      securityGroups: [lambdaSecurityGroup]
+    });
+
+    // 添加 Execute API 端点 (用于 WebSocket)
+    vpc.addInterfaceEndpoint('ExecuteApiEndpoint', {
+      service: new ec2.InterfaceVpcEndpointService(`com.amazonaws.${this.region}.execute-api`, 443),
+      subnets: {
+        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS
+      },
+      privateDnsEnabled: true,
+      securityGroups: [lambdaSecurityGroup]
+    });
+
+    // 允许 Lambda 访问 Ollama 服务
+    fargateService.service.connections.allowFrom(
+      lambdaSecurityGroup,
+      ec2.Port.tcp(11434),
+      'Allow Lambda to access Ollama service'
+    );
 
     // 创建 Authorizer Lambda
     const authorizerFunction = new NodejsFunction(this, 'AuthorizerFunction', {
