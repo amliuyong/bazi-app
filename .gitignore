@@ -43,4 +43,9 @@ backend/cdk.context.json
 .idea
 .vscode
 my_test_*
+.env
+.env.local
+.env.development
+.env.production
+
 
