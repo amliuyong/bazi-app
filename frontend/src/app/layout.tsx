@@ -4,6 +4,7 @@ import "./globals.css";
 import AntdRegistry from '@/providers/AntdRegistry';
 import AppLayout from '@/components/RootLayout';
 import Script from 'next/script';
+import SessionProvider from "@/components/SessionProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -42,9 +43,11 @@ export default function RootLayout({
         <Script src="/env-config.js" strategy="beforeInteractive" />
       </head>
       <body className={inter.className}>
-        <AntdRegistry>
-          <AppLayout>{children}</AppLayout>
-        </AntdRegistry>
+        <SessionProvider>
+          <AntdRegistry>
+            <AppLayout>{children}</AppLayout>
+          </AntdRegistry>
+        </SessionProvider>
       </body>
     </html>
   );
