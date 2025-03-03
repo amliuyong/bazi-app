@@ -238,7 +238,7 @@ export class BackendStack extends Stack {
     });
 
     // 创建 WebSocket API with authorizer on $connect route
-    const webSocketApi = new apigatewayv2.WebSocketApi(this, 'OllamaWebSocketApi', {
+    const webSocketApi = new apigatewayv2.WebSocketApi(this, 'baziWebSocketApi', {
       connectRouteOptions: {
         integration: new apigatewayv2_integrations.WebSocketLambdaIntegration(
           'ConnectIntegration',
